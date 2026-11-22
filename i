@@ -24,10 +24,10 @@ umask 077
 
 # ------------------------------------------------------------------------------------------------------------ constants (stamped by tools/publish-dist.sh)
 AKV_REPO=${AKV_REPO:-jaber717/akv}
-AKV_VERSION_DEFAULT="1.1.0-rc3"
+AKV_VERSION_DEFAULT="1.1.0-rc4"
 AKV_INSTALLER_REV="2"
-PREFLIGHT_SHA256="4f6d445c7326fedc1d4c6dac1df3815aa26d814edc9eb08a90a72b29b3dfb3f1"
-MANIFEST_SHA256="5d5ce429e93e0edc10646a446135cf1eac932297ca4f27ecc98dee8307a28bb8"
+PREFLIGHT_SHA256="128c848241723f5e3b6ca91dd819fb6065faa97709810b9fd24eba7caae04488"
+MANIFEST_SHA256="9f9fd1fd69e5935d92df3cd9943537c20eef8fe48a1e8ae23c150ff3ccf065fa"
 API_HOST="api.github.com"
 ASSET_HOST="release-assets.githubusercontent.com"
 ETC=${AP_ETC:-/etc/akvorado-platform}
@@ -36,7 +36,7 @@ LOGDIR=${AKV_LOGDIR:-/var/log/akvorado-platform}
 SELF_INSTALL=/usr/local/sbin/akvorado-install
 NETENV="$ETC/network.env"
 
-E_USAGE=2; E_NEEDS_CONFIG=3; E_PREREQ=11; E_AUTH=12; E_NET=13; E_NOTFOUND=14; E_RATE=15; E_SERVER=16; E_INTEGRITY=17; E_SPACE=18; E_INCOMPLETE=19; E_PLATFORM=20; E_RANGE=21
+E_USAGE=2; E_NEEDS_CONFIG=3; E_PREREQ=11; E_AUTH=12; E_NET=13; E_NOTFOUND=14; E_RATE=15; E_SERVER=16; E_INTEGRITY=17; E_SPACE=18; E_INCOMPLETE=19; E_PLATFORM=20; E_RANGE=21; E_BUSY=22
 
 # ------------------------------------------------------------------------------------------------------------ output
 c_b=""; c_r=""; c_g=""; c_y=""; c_0=""
@@ -659,6 +659,9 @@ main() {
   fi
   need_root; check_tools; setup_test_mode; check_os
   mkdir -p "$LOGDIR"; chmod 750 "$LOGDIR"
+  # only one installer at a time: two runs appending to the same staged files (or installing together) would corrupt each other
+  install -d -m 0700 "$STAGING_ROOT"; exec 200>"$STAGING_ROOT/.lock"
+  if command -v flock >/dev/null 2>&1; then flock -n 200 || die "$E_BUSY" "another akvorado-install is already running on this host (it holds $STAGING_ROOT/.lock). Wait for it to finish, or stop it, then run the same command again."; fi
   exec > >(tee -a "$LOGDIR/akvorado-install-$(date +%Y%m%d-%H%M%S).log") 2>&1
   make_runtmp; resolve_network; acquire_token
   [ "$HAVE_TOKEN" = 1 ] && ok "credentials: token from $TOKEN_SOURCE (tmpfs only, never in a command line or log)"

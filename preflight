@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # preflight.sh - READ-ONLY readiness check for installing akvorado-platform on RHEL 9 from GitHub.
 #
-# It installs nothing, changes nothing, deletes nothing and writes no file (not even a temporary one). It downloads at most ~50 MiB of release bytes,
+# It installs nothing, changes nothing and deletes nothing. Its only file is a temporary directory under /var/tmp holding the release RPM repository (about 90 MB) for the dnf transaction check; it is removed at exit. It downloads at most ~50 MiB of release bytes,
 # straight to /dev/null, to measure how the network path (proxy / TLS inspection) behaves for ranged downloads. It never prints a password or token.
 # Credentials: the GitHub token arrives on file descriptor 3 (typed at a hidden prompt by the one-liner in docs/PREFLIGHT.md) and is handed to curl
 # through a process-substitution config - never in a command line, an environment variable or a file.
 set +x; set -u; export LC_ALL=C; umask 077
-REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc3}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
+REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc4}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
 if [ "${AKV_TEST_MODE:-0}" = 1 ] && [ -n "${AKV_API_BASE:-}" ]; then case "$AKV_API_BASE" in https://127.0.0.1:*|https://localhost:*) API=$AKV_API_BASE ;; *) echo "AKV_API_BASE may only be loopback"; exit 2 ;; esac; fi
 P=0; W=0; F=0; NEXTS=()
 pass() { printf '  PASS  %s\n' "$*"; P=$((P+1)); }
@@ -182,6 +182,47 @@ if [ -n "$ASSETID" ]; then
     done
     [ -n "$best" ] && info "recommended download chunk size for this network: ${best} MiB (installer default 16 MiB; it falls back to smaller chunks automatically)"
   else m=$(proxyfail "$hd"); fail "could not obtain the asset download URL (HTTP ${code:-none}) $m" "${m:-check the token and the proxy}"; fi
+fi
+
+# ------------------------------------------------------------------------------------------------------------ PACKAGE DEPENDENCIES (dnf transaction check)
+if [ -n "$REL" ] && [ "${AKV_TEST_MODE:-0}" != 1 ]; then
+  sec "PACKAGE DEPENDENCIES: dnf transaction check against the bundled packages (nothing is installed)"
+  if ! command -v dnf >/dev/null 2>&1; then warn "dnf is not available: the package check was skipped"
+  elif [ "$S" = NONE ]; then warn "no root / passwordless sudo: the package check (it needs root to read the RPM database) was skipped"
+  else
+    rinfo=$(printf '%s' "$REL" | python3 -c '
+import json,sys
+a=[x for x in json.load(sys.stdin)["assets"] if x["name"].endswith("-rpm-repo.tar.gz")]
+print("%s|%s|%s" % (a[0]["id"],a[0]["size"],(a[0].get("digest") or "").replace("sha256:","")) if a else "")' 2>/dev/null)
+    IFS='|' read -r rid rsize rsha <<<"$rinfo"
+    if [ -z "${rid:-}" ]; then warn "the release has no RPM repository asset: the package check was skipped"
+    else
+      pt=$(mktemp -d /var/tmp/akv-preflight.XXXXXX) || pt=""
+      if [ -z "$pt" ]; then warn "cannot create a temporary directory under /var/tmp: the package check was skipped"
+      else
+        trap 'rm -rf "$pt"' EXIT
+        rurl=$(cx -H 'Accept: application/octet-stream' -o /dev/null -w '%{redirect_url}' "$API/repos/$REPO/releases/assets/$rid" 2>/dev/null)
+        if [ -n "$rurl" ] && cxn -m 900 --retry 3 --retry-delay 3 -C - -H 'Accept-Encoding: identity' -o "$pt/rpm.tgz" "$rurl" 2>/dev/null && [ "$(stat -c %s "$pt/rpm.tgz" 2>/dev/null)" = "$rsize" ]; then
+          if [ -n "$rsha" ] && [ "$(sha256sum "$pt/rpm.tgz" | cut -d' ' -f1)" != "$rsha" ]; then fail "the downloaded RPM repository does not match the checksum GitHub publishes for it" "run the check again; if it repeats, the proxy is altering downloads"
+          else
+            mkdir "$pt/repo" "$pt/cache" && tar -xzf "$pt/rpm.tgz" -C "$pt/repo" --no-same-owner 2>/dev/null && [ -d "$pt/repo/repodata" ] || fail "the RPM repository archive cannot be unpacked" "run the check again"
+            if [ -d "$pt/repo/repodata" ]; then
+              want=(); for p in jq policycoreutils-python-utils checkpolicy policycoreutils xfsprogs docker-ce docker-ce-cli containerd.io docker-compose-plugin; do rpm -q "$p" >/dev/null 2>&1 || want+=("$p"); done
+              if [ "${#want[@]}" -eq 0 ]; then pass "all packages the installer needs are already installed"
+              else
+                sim=$(rootcmd dnf -q --assumeno --disablerepo='*' --repofrompath=akvsim,"file://$pt/repo" --enablerepo=akvsim --setopt=akvsim.gpgcheck=0 --setopt=cachedir="$pt/cache" --setopt=install_weak_deps=False install "${want[@]}" </dev/null 2>&1 || true)
+                if echo "$sim" | grep -qE 'Problem|nothing provides|conflicting requests|cannot install'; then
+                  fail "the bundled packages cannot be installed on THIS host: $(echo "$sim" | grep -E 'nothing provides|conflict|requires|cannot install' | head -2 | sed 's/^ *- *//' | tr '\n' ';' | cut -c1-300)" "bring this host to the latest RHEL 9.7 patch level (dnf update from your RHEL repositories / Satellite), then run the check again"
+                elif echo "$sim" | grep -q 'Transaction Summary'; then pass "dnf transaction check passed: ${want[*]} install without conflicts on this host (simulation only)"
+                else warn "the dnf transaction check gave no clear answer (output: $(echo "$sim" | head -2 | tr '\n' ' ' | cut -c1-200))"; fi
+              fi
+            fi
+          fi
+        else warn "the RPM repository could not be downloaded here (the package check was NOT performed)"; fi
+        rm -rf "$pt"; trap - EXIT
+      fi
+    fi
+  fi
 fi
 
 # ------------------------------------------------------------------------------------------------------------------------------------ SPACE

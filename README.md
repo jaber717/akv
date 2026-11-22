@@ -2,17 +2,17 @@
 
 Installs and runs an Akvorado (NetFlow / IPFIX / sFlow) collector with ClickHouse and Kafka on **RHEL 9.x, x86_64**, from this public repository only. No GitHub token is needed.
 
-Everything the installer downloads comes from the release `v1.1.0-rc3` of this repository, over HTTPS to two hosts: `api.github.com` and `release-assets.githubusercontent.com`.
+Everything the installer downloads comes from the release `v1.1.0-rc4` of this repository, over HTTPS to two hosts: `api.github.com` and `release-assets.githubusercontent.com`.
 Every file is verified (size, SHA-256 from `SHA256SUMS`, GitHub's own asset digest); TLS verification is never disabled.
 
 ## 1. Check the server first (read-only: installs and changes nothing)
 ```
-bash -c "$(curl -sS -H Accept:application/vnd.github.raw https://api.github.com/repos/jaber717/akv/contents/i?ref=v1.1.0-rc3)" x check
+bash -c "$(curl -sS -H Accept:application/vnd.github.raw https://api.github.com/repos/jaber717/akv/contents/i?ref=v1.1.0-rc4)" x check
 ```
 
 ## 2. Install
 ```
-bash -c "$(curl -sS -H Accept:application/vnd.github.raw https://api.github.com/repos/jaber717/akv/contents/i?ref=v1.1.0-rc3)"
+bash -c "$(curl -sS -H Accept:application/vnd.github.raw https://api.github.com/repos/jaber717/akv/contents/i?ref=v1.1.0-rc4)"
 ```
 Run both as your normal admin user (the installer uses `sudo` itself and passes your proxy settings on). It asks only for what cannot be detected: the router IP(s) that will send NetFlow, the networks allowed to open the web UI, and (optionally) an SNMP read-only community.
 It never formats a disk: a dedicated data volume must already be mounted (or pass `--data-dir`). Re-running the same command is safe and keeps all data.
