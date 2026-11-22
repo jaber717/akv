@@ -6,7 +6,7 @@
 # Credentials: the GitHub token arrives on file descriptor 3 (typed at a hidden prompt by the one-liner in docs/PREFLIGHT.md) and is handed to curl
 # through a process-substitution config - never in a command line, an environment variable or a file.
 set +x; set -u; export LC_ALL=C; umask 077
-REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc4}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
+REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc5}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
 if [ "${AKV_TEST_MODE:-0}" = 1 ] && [ -n "${AKV_API_BASE:-}" ]; then case "$AKV_API_BASE" in https://127.0.0.1:*|https://localhost:*) API=$AKV_API_BASE ;; *) echo "AKV_API_BASE may only be loopback"; exit 2 ;; esac; fi
 P=0; W=0; F=0; NEXTS=()
 pass() { printf '  PASS  %s\n' "$*"; P=$((P+1)); }
@@ -200,7 +200,7 @@ print("%s|%s|%s" % (a[0]["id"],a[0]["size"],(a[0].get("digest") or "").replace("
       pt=$(mktemp -d /var/tmp/akv-preflight.XXXXXX) || pt=""
       if [ -z "$pt" ]; then warn "cannot create a temporary directory under /var/tmp: the package check was skipped"
       else
-        trap 'rm -rf "$pt"' EXIT
+        trap 'rootcmd rm -rf "$pt" 2>/dev/null || rm -rf "$pt"' EXIT
         rurl=$(cx -H 'Accept: application/octet-stream' -o /dev/null -w '%{redirect_url}' "$API/repos/$REPO/releases/assets/$rid" 2>/dev/null)
         if [ -n "$rurl" ] && cxn -m 900 --retry 3 --retry-delay 3 -C - -H 'Accept-Encoding: identity' -o "$pt/rpm.tgz" "$rurl" 2>/dev/null && [ "$(stat -c %s "$pt/rpm.tgz" 2>/dev/null)" = "$rsize" ]; then
           if [ -n "$rsha" ] && [ "$(sha256sum "$pt/rpm.tgz" | cut -d' ' -f1)" != "$rsha" ]; then fail "the downloaded RPM repository does not match the checksum GitHub publishes for it" "run the check again; if it repeats, the proxy is altering downloads"
@@ -210,16 +210,16 @@ print("%s|%s|%s" % (a[0]["id"],a[0]["size"],(a[0].get("digest") or "").replace("
               want=(); for p in jq policycoreutils-python-utils checkpolicy policycoreutils xfsprogs docker-ce docker-ce-cli containerd.io docker-compose-plugin; do rpm -q "$p" >/dev/null 2>&1 || want+=("$p"); done
               if [ "${#want[@]}" -eq 0 ]; then pass "all packages the installer needs are already installed"
               else
-                sim=$(rootcmd dnf -q --assumeno --disablerepo='*' --repofrompath=akvsim,"file://$pt/repo" --enablerepo=akvsim --setopt=akvsim.gpgcheck=0 --setopt=cachedir="$pt/cache" --setopt=install_weak_deps=False install "${want[@]}" </dev/null 2>&1 || true)
+                sim=$(rootcmd dnf --assumeno --disablerepo='*' --repofrompath=akvsim,"file://$pt/repo" --enablerepo=akvsim --setopt=akvsim.gpgcheck=0 --setopt=cachedir="$pt/cache" --setopt=install_weak_deps=False install "${want[@]}" </dev/null 2>&1 || true)
                 if echo "$sim" | grep -qE 'Problem|nothing provides|conflicting requests|cannot install'; then
                   fail "the bundled packages cannot be installed on THIS host: $(echo "$sim" | grep -E 'nothing provides|conflict|requires|cannot install' | head -2 | sed 's/^ *- *//' | tr '\n' ';' | cut -c1-300)" "bring this host to the latest RHEL 9.7 patch level (dnf update from your RHEL repositories / Satellite), then run the check again"
-                elif echo "$sim" | grep -q 'Transaction Summary'; then pass "dnf transaction check passed: ${want[*]} install without conflicts on this host (simulation only)"
+                elif echo "$sim" | grep -qE 'Transaction Summary|Operation aborted|Nothing to do'; then pass "dnf transaction check passed: ${want[*]} install without conflicts on this host (simulation only)"
                 else warn "the dnf transaction check gave no clear answer (output: $(echo "$sim" | head -2 | tr '\n' ' ' | cut -c1-200))"; fi
               fi
             fi
           fi
         else warn "the RPM repository could not be downloaded here (the package check was NOT performed)"; fi
-        rm -rf "$pt"; trap - EXIT
+        rootcmd rm -rf "$pt" 2>/dev/null || rm -rf "$pt"; trap - EXIT
       fi
     fi
   fi
