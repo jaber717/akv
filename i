@@ -24,10 +24,10 @@ umask 077
 
 # ------------------------------------------------------------------------------------------------------------ constants (stamped by tools/publish-dist.sh)
 AKV_REPO=${AKV_REPO:-jaber717/akv}
-AKV_VERSION_DEFAULT="1.1.0-rc5"
+AKV_VERSION_DEFAULT="1.1.0-rc6"
 AKV_INSTALLER_REV="2"
-PREFLIGHT_SHA256="af75822fbbf56c85857675921a70cd7413a00948cc90dc1db0a3448c48d203e2"
-MANIFEST_SHA256="9375dd16eb2c8e628f56a18391fb38471dc753e4d513f18c4923d4d8166a0964"
+PREFLIGHT_SHA256="361b212a6a7b43c1a3fff795e155a65f4585fde10a7c25de30f2426b1a60f5d9"
+MANIFEST_SHA256="53d3710e9dda44863a1d7230069128d843002219711857240b246831b8e6548a"
 API_HOST="api.github.com"
 ASSET_HOST="release-assets.githubusercontent.com"
 ETC=${AP_ETC:-/etc/akvorado-platform}
