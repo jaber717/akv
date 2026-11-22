@@ -6,7 +6,7 @@
 # Credentials: the GitHub token arrives on file descriptor 3 (typed at a hidden prompt by the one-liner in docs/PREFLIGHT.md) and is handed to curl
 # through a process-substitution config - never in a command line, an environment variable or a file.
 set +x; set -u; export LC_ALL=C; umask 077
-REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc2}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
+REPO=${AKV_REPO:-jaber717/akv}; VER=${AKV_VERSION:-1.1.0-rc3}; API="https://api.github.com"; ASSET_HOST="release-assets.githubusercontent.com"
 if [ "${AKV_TEST_MODE:-0}" = 1 ] && [ -n "${AKV_API_BASE:-}" ]; then case "$AKV_API_BASE" in https://127.0.0.1:*|https://localhost:*) API=$AKV_API_BASE ;; *) echo "AKV_API_BASE may only be loopback"; exit 2 ;; esac; fi
 P=0; W=0; F=0; NEXTS=()
 pass() { printf '  PASS  %s\n' "$*"; P=$((P+1)); }

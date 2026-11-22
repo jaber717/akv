@@ -24,9 +24,10 @@ umask 077
 
 # ------------------------------------------------------------------------------------------------------------ constants (stamped by tools/publish-dist.sh)
 AKV_REPO=${AKV_REPO:-jaber717/akv}
-AKV_VERSION_DEFAULT="1.1.0-rc2"
+AKV_VERSION_DEFAULT="1.1.0-rc3"
 AKV_INSTALLER_REV="2"
-PREFLIGHT_SHA256="299ae1aaf829d92e944a37113b600724722551cf2279fb0a47b2885d5ca9a2c4"
+PREFLIGHT_SHA256="4f6d445c7326fedc1d4c6dac1df3815aa26d814edc9eb08a90a72b29b3dfb3f1"
+MANIFEST_SHA256="5d5ce429e93e0edc10646a446135cf1eac932297ca4f27ecc98dee8307a28bb8"
 API_HOST="api.github.com"
 ASSET_HOST="release-assets.githubusercontent.com"
 ETC=${AP_ETC:-/etc/akvorado-platform}
@@ -365,6 +366,13 @@ load_manifest() {
   done
   local want; want=$(awk '$2=="manifest.json" || $2=="*manifest.json" {print $1}' "$RUNTMP/SHA256SUMS")
   [ -n "$want" ] && [ "$want" = "$(sha_of "$RUNTMP/manifest.json")" ] || die "$E_INTEGRITY" "manifest.json is not covered by / does not match SHA256SUMS"
+  # the manifest checksum is pinned INSIDE this installer, which the release tag (protected, immutable) pins: the chain no longer depends on mutable release assets
+  if [ "${MANIFEST_SHA256:0:2}" != "@@" ] && [ "$REL_VER" = "$AKV_VERSION_DEFAULT" ]; then
+    [ "$(sha_of "$RUNTMP/manifest.json")" = "$MANIFEST_SHA256" ] || die "$E_INTEGRITY" "manifest.json does not match the checksum pinned inside this installer: refusing to continue (the release may have been altered)"
+    ok "manifest matches the checksum pinned in this installer"
+  else
+    warn "the manifest checksum is not pinned for this release (a different or development version): relying on TLS, SHA256SUMS and GitHub's own digests"
+  fi
   local kind a b c
   M_ASSETS=(); IMG_PARTS=()
   while IFS=$'\t' read -r kind a b c; do
